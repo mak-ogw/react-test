@@ -88,3 +88,15 @@ body {
 .game-info {
   margin-left: 20px;
 }
+
+.filedroparea-normal{
+  width: 200;
+  height: 150;
+  border: "1px dotted #888";
+}
+.filedroparea-drag{
+  width: 200;
+  height: 150;
+  border: "1px solid #00f";
+  transition: 'border .5s ease-in-out';
+}

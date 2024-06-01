@@ -1,10 +1,13 @@
 import { useState } from 'react';
+import { useCallback } from 'react';
+import { useDropzone } from 'react-dropzone';
+let midiParser  = require('midi-parser-js');
 
 function Square({value, onSquareClick}) {
   return <button className="square" onClick={onSquareClick}>{value}</button>;
 }
 
-export default function Board() {
+function Board() {
   const [squares, setSquares] = useState(Array(9).fill(null));
   const [isX, toggleIsX] = useState(true);
   function isFinished( sq ) {
@@ -46,6 +49,60 @@ export default function Board() {
         <Square value={squares[7]} onSquareClick={()=>handleClick(7)}/>
         <Square value={squares[8]} onSquareClick={()=>handleClick(8)}/>
       </div>
+    </>
+  );
+}
+
+function FileDropArea(){
+  const onDrop = useCallback((acceptedFiles) => {
+    // console.log('acceptedFiles:', acceptedFiles);
+    if( acceptedFiles.length != 1 ){
+      setResult(2);
+      return;
+    }
+    setResult(1);
+    let file = acceptedFiles[0];
+    let reader=new FileReader();
+    reader.onload = function(e){
+      let rawDataUint8 = new Uint8Array(e.target.result);
+      // console.log(rawDataUint8);
+      let midiData = midiParser.parse(rawDataUint8);
+      console.log(midiData);
+    };
+    reader.readAsArrayBuffer(file);
+
+}, []);
+const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
+const [result, setResult] = useState(0);
+const [successMessage] = useState("succeeded to get a .MID file.");
+return (
+  <>
+    <div {...getRootProps()} className={isDragActive?"filedroparea-normal":"filedroparea-drag"} >
+    <input {...getInputProps()} />
+    {
+      isDragActive ?
+        <p>Drop the .MID file here ...</p> :
+        <p>Drag and drop a .MID file here, or click to select a file</p>
+    }
+    </div>
+    <div>
+    {
+      ( result == 0 ) ?
+        <p></p> :
+      ( result == 1 ) ?
+        <p> {successMessage} </p> :
+        <p> Error happend. Please retry it. (Only one file is acceptable.)</p>
+    }
+    </div>
+  </>
+);
+}
+
+export default function App() {
+  return(
+    <>
+      <Board />
+      <FileDropArea />
     </>
   );
 }
