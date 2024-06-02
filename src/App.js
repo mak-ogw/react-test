@@ -2,8 +2,93 @@ import { useState } from 'react';
 import { useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 
-
 import { MidiIo } from './MidiIo.js';
+let receiveMidiInput = function(event)
+{
+  let receivedMessages = event.data;
+  if( receivedMessages.length <= 1 ) return;
+  console.log(receivedMessages[0]);
+};
+let midiIo = new MidiIo( receiveMidiInput );
+function SyncStatusArea(){
+  return (
+    <>
+    {
+      ( midiIo.openInputPortNumber === -1 ) ? <p>Please connect your SEQTRAK via USB cable.</p>
+      : <p>SEQTRAK is connected.</p>
+    }
+    </>
+  )
+}
+
+var noteList = [];
+function makeNoteList(data){
+  console.log(data);
+  if( data.track === undefined ) return;
+  if( data.track === null ) return;
+
+  // converting to SEQTRAK reso. (480 ticks/beat)
+  let resoCoef = 480 / data.timeDivision;
+
+  var noteOnHash = {};
+  let events = data.track[0].event;
+  var totalDeltaTime = 0;
+  for( var i=0; i<events.length; ++i ){
+    let evt = events[i];
+    totalDeltaTime += evt.deltaTime;
+    if( evt.channel !== 0 ) continue; // ch=0 only
+    if( evt.type !== 8 && evt.type !== 9 ) continue; // Note only
+
+    let eventTime = totalDeltaTime * resoCoef;
+    let noteNumber = evt.data[0];
+    let velocity = evt.data[1];
+    switch( evt.type ){
+      case 9: // Note On
+        if( noteOnHash[noteNumber] === undefined ){ // noteNum is not found, add it simply
+          noteOnHash[noteNumber] = [eventTime, velocity];
+        }
+        else{ // already there is noteOn
+          // push
+          let startTime = noteOnHash[noteNumber][0];
+          let duration = eventTime - startTime - 1; // avoid dup notes
+          let note = {};
+          note.eventTime = startTime;
+          note.noteNumber = noteNumber;
+          note.velocity = noteOnHash[noteNumber][1];
+          note.duration = duration;
+          noteList.push(note);
+          // delete from hash
+          delete noteOnHash[noteNumber];
+          // add to hash
+          noteOnHash[noteNumber] = [eventTime, velocity];
+        }
+        break;
+      case 8: // Note Off
+        {
+          if( noteOnHash[noteNumber] !== undefined ){ // already there is noteOn
+            // push
+            let startTime = noteOnHash[noteNumber][0];
+            let duration = eventTime - startTime;
+            let note = {};
+            note.eventTime = startTime;
+            note.noteNumber = noteNumber;
+            note.velocity = noteOnHash[noteNumber][1];
+            note.duration = duration;
+            noteList.push(note);
+            // delete from hash
+            delete noteOnHash[noteNumber];
+          }
+          else{ // noteNum is not found, so ignore noteOff
+          }
+          break;
+        }
+      default:
+        break;
+    }
+    // console.log(eventTime, noteNumber, velocity);
+  }
+  console.log(noteList);
+}
 
 let midiParser  = require('midi-parser-js');
 function FileDropArea(){
@@ -20,7 +105,7 @@ function FileDropArea(){
       let rawDataUint8 = new Uint8Array(e.target.result);
       // console.log(rawDataUint8);
       let midiData = midiParser.parse(rawDataUint8);
-      console.log(midiData);
+      makeNoteList(midiData);
     };
     reader.readAsArrayBuffer(file);
 
@@ -51,80 +136,42 @@ return (
 );
 }
 
-let receiveMidiInput = function(event)
-{
-  let receivedMessages = event.data;
-  if( receivedMessages.length <= 1 ) return;
-  console.log(receivedMessages[0]);
-};
-let midiIo = new MidiIo( receiveMidiInput );
-function SyncStatusArea(){
-  return (
+// add:    F0 43 10 7F 1C 0C 70 00 00 ss nn vv dm dl F7
+// timing: F0 43 10 7F 1C 0C 70 10 00 ss tt F7    tt = 00(-60) ~ 3C(0) ~ 77(+59)
+// remove: F0 43 10 7F 1C 0C 70 20 00 ss F7
+let sysExList = [];
+function makeSysExList( events, channel=0 ){
+  for( var i=0; i<events.length; ++i ){
+    // let step = 
+    // var addMsg = [ 0xF0, 0x43, 0x10, 0x7F, 0x1C, 0x0C, 0x70, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF7 ];
+    // var timMsg = [ 0xF0, 0x43, 0x10, 0x7F, 0x1C, 0x0C, 0x70, 0x00, 0x00, 0x00, 0x00, 0xF7 ];
+    // ss : addMsg[9]
+    // nn : addMsg[10]
+    // vv : addMsg[11]
+    // dm : addMsg[12]
+    // dl : addMsg[13]
+    // ss : timMsg[9]
+    // tt : timMsg[10]
+  }
+}
+
+function SendButton(){
+  const sendButtonClicked = ()=>{
+    makeSysExList(noteList, 0);
+  };
+  return(
     <>
-    {
-      ( midiIo.openInputPortNumber === -1 ) ? <p>Please connect your SEQTRAK via USB cable.</p>
-      : <p>SEQTRAK is connected.</p>
-    }
+      <button onClick={sendButtonClicked}>Send To SEQTRAK(Track=0)</button>
     </>
   )
 }
 
-// function Square({value, onSquareClick}) {
-//   return <button className="square" onClick={onSquareClick}>{value}</button>;
-// }
-
-// function Board() {
-//   const [squares, setSquares] = useState(Array(9).fill(null));
-//   const [isX, toggleIsX] = useState(true);
-//   function isFinished( sq ) {
-//     if( sq[0] != null && sq[0] === sq[1] && sq[1] === sq[2] ) return true;
-//     if( sq[3] != null && sq[3] === sq[4] && sq[4] === sq[5] ) return true;
-//     if( sq[6] != null && sq[6] === sq[7] && sq[7] === sq[8] ) return true;
-//     if( sq[0] != null && sq[0] === sq[3] && sq[3] === sq[6] ) return true;
-//     if( sq[1] != null && sq[1] === sq[4] && sq[4] === sq[7] ) return true;
-//     if( sq[2] != null && sq[2] === sq[5] && sq[5] === sq[8] ) return true;
-//     if( sq[0] != null && sq[0] === sq[4] && sq[4] === sq[8] ) return true;
-//     if( sq[6] != null && sq[6] === sq[4] && sq[4] === sq[2] ) return true;
-//     return false;
-//   }
-//   function handleClick(index){
-//     if(squares[index] != null){return;}
-//     const nextSquares = squares.slice();
-//     nextSquares[index] = isX ? "X" : "O";
-//     setSquares(nextSquares);
-//     toggleIsX(!isX);
-//     if( isFinished(nextSquares) ){
-//       console.log("Finished!");
-//       setSquares(Array(9).fill(null));
-//     }
-//   }
-//   return (
-//     <>
-//       <div className="board-row">
-//       <Square value={squares[0]} onSquareClick={()=>handleClick(0)}/>
-//         <Square value={squares[1]} onSquareClick={()=>handleClick(1)}/>
-//         <Square value={squares[2]} onSquareClick={()=>handleClick(2)}/>
-//       </div>
-//       <div className="board-row">
-//         <Square value={squares[3]} onSquareClick={()=>handleClick(3)}/>
-//         <Square value={squares[4]} onSquareClick={()=>handleClick(4)}/>
-//         <Square value={squares[5]} onSquareClick={()=>handleClick(5)}/>
-//       </div>
-//       <div className="board-row">
-//         <Square value={squares[6]} onSquareClick={()=>handleClick(6)}/>
-//         <Square value={squares[7]} onSquareClick={()=>handleClick(7)}/>
-//         <Square value={squares[8]} onSquareClick={()=>handleClick(8)}/>
-//       </div>
-//     </>
-//   );
-// }
-
 export default function App() {
   return(
     <>
-      {/* <Board /> */}
       <SyncStatusArea />
       <FileDropArea />
+      <SendButton />
     </>
   );
 }
