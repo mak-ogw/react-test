@@ -1,15 +1,16 @@
 class MidiIo
 {
-	constructor( midiInFunc=null )
+	constructor( midiInFunc=null, notifyPortNumber )
 	{
 		MidiIo.midi = null;
 		MidiIo.inputs = [];
 		MidiIo.outputs = [];
 		MidiIo.midiInHandler = midiInFunc;
+		MidiIo.portNumberNotifier = notifyPortNumber;
 		MidiIo.openInputPortNumber = -1;
 		MidiIo.openOutputPortNumber = -1;
 		
-		navigator.requestMIDIAccess( { sysex: false } ).then( MidiIo.initSuccess, MidiIo.initFailure );
+		navigator.requestMIDIAccess( { sysex: true } ).then( MidiIo.initSuccess, MidiIo.initFailure );
 	}
 	
 	setInputHandler( midiInFunc )
@@ -20,6 +21,7 @@ class MidiIo
 	static initSuccess( midiAccess ) {
 		MidiIo.midi = midiAccess;
 		midiAccess.onstatechange = (e)=>{MidiIo.onStateChange(e)};
+		MidiIo.openMidiPorts();
 	}
 	
 	static initFailure( msg )
@@ -30,22 +32,28 @@ class MidiIo
 	static onStateChange( event )
 	{
 		// console.log("midi state changed.");
+		MidiIo.openMidiPorts();
+	}
+
+	static openMidiPorts()
+	{
 		if (typeof MidiIo.midi.inputs === "function")
-		{
-			MidiIo.inputs = MidiIo.midi.inputs();
-			MidiIo.outputs = MidiIo.midi.outputs();
-		}
-		else
-		{
-			MidiIo.inputs = [];
-			MidiIo.outputs = [];
-			let inputIterator = MidiIo.midi.inputs.values();
-			for (let o = inputIterator.next(); !o.done; o = inputIterator.next()) { MidiIo.inputs.push( o.value ) }
-			let outputIterator = MidiIo.midi.outputs.values();
-			for (let o = outputIterator.next(); !o.done; o = outputIterator.next()) { MidiIo.outputs.push( o.value ) }
-		}
-		MidiIo.initInputsList();
-		MidiIo.initOutputsList();
+			{
+				MidiIo.inputs = MidiIo.midi.inputs();
+				MidiIo.outputs = MidiIo.midi.outputs();
+			}
+			else
+			{
+				MidiIo.inputs = [];
+				MidiIo.outputs = [];
+				let inputIterator = MidiIo.midi.inputs.values();
+				for (let o = inputIterator.next(); !o.done; o = inputIterator.next()) { MidiIo.inputs.push( o.value ) }
+				let outputIterator = MidiIo.midi.outputs.values();
+				for (let o = outputIterator.next(); !o.done; o = outputIterator.next()) { MidiIo.outputs.push( o.value ) }
+			}
+			MidiIo.initInputsList();
+			MidiIo.initOutputsList();
+			MidiIo.portNumberNotifier( MidiIo.openOutputPortNumber !== -1 );
 	}
 	
 	static initInputsList()
@@ -54,9 +62,11 @@ class MidiIo
 			if( MidiIo.inputs[i].name.indexOf('SEQTRAK') > 0 ){
 				MidiIo.openInputPortNumber = i;
 				MidiIo.inputs[i].onmidimessage = MidiIo.handleMidiInMessage;
+				console.log("SEQTRAK input port is opened.");
 				return;
 			}
 		}
+		console.log("SEQTRAK input port is NOT opened.");
 		MidiIo.openInputPortNumber = -1;
 	}
 	
@@ -66,9 +76,11 @@ class MidiIo
 			if( MidiIo.outputs[i].name.indexOf('SEQTRAK') > 0 ){
 				MidiIo.openOutputPortNumber = i;
 				MidiIo.outputs[i].onmidimessage = MidiIo.handleMidioutMessage;
+				console.log("SEQTRAK output port is opened.");
 				return;
 			}
 		}
+		console.log("SEQTRAK output port is NOT opened.");
 		MidiIo.openOutputPortNumber = -1;
 	}
 	

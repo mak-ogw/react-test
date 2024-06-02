@@ -9,17 +9,22 @@ let receiveMidiInput = function(event)
   if( receivedMessages.length <= 1 ) return;
   console.log(receivedMessages[0]);
 };
-let midiIo = new MidiIo( receiveMidiInput );
-function SyncStatusArea(){
+function SyncStatusArea(isOpen = false){
+  const [portOpen] = useState(isOpen);
   return (
     <>
     {
-      ( midiIo.openInputPortNumber === -1 ) ? <p>Please connect your SEQTRAK via USB cable.</p>
+      ( portOpen ) ? <p>Please connect your SEQTRAK via USB cable.</p>
       : <p>SEQTRAK is connected.</p>
     }
     </>
   )
 }
+function notifyPortNumber(isOpen){
+  console.log("changed open status");
+  SyncStatusArea(isOpen);
+};
+new MidiIo( receiveMidiInput, notifyPortNumber );
 
 var noteList = [];
 function makeNoteList(data){
@@ -139,25 +144,42 @@ return (
 // add:    F0 43 10 7F 1C 0C 70 00 00 ss nn vv dm dl F7
 // timing: F0 43 10 7F 1C 0C 70 10 00 ss tt F7    tt = 00(-60) ~ 3C(0) ~ 77(+59)
 // remove: F0 43 10 7F 1C 0C 70 20 00 ss F7
-let sysExList = [];
-function makeSysExList( events, channel=0 ){
+function sendSysEx( events, channel=0 ){
+  if( channel >= 11 ) return;
   for( var i=0; i<events.length; ++i ){
-    // let step = 
-    // var addMsg = [ 0xF0, 0x43, 0x10, 0x7F, 0x1C, 0x0C, 0x70, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF7 ];
-    // var timMsg = [ 0xF0, 0x43, 0x10, 0x7F, 0x1C, 0x0C, 0x70, 0x00, 0x00, 0x00, 0x00, 0xF7 ];
+    var addMsg = [ 0xF0, 0x43, 0x10, 0x7F, 0x1C, 0x0C, 0x70, channel, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF7 ];
+    var timMsg = [ 0xF0, 0x43, 0x10, 0x7F, 0x1C, 0x0C, 0x70, channel, 0x00, 0x00, 0x00, 0xF7 ];
     // ss : addMsg[9]
+    addMsg[9] = Math.trunc( ( events[i].eventTime + 60 ) / 120 );
     // nn : addMsg[10]
+    addMsg[10] = events[i].noteNumber;
     // vv : addMsg[11]
+    addMsg[11] = events[i].velocity;
     // dm : addMsg[12]
+    addMsg[12] = Math.trunc(events[i].duration / 128);
     // dl : addMsg[13]
+    addMsg[13] = events[i].duration % 128;
     // ss : timMsg[9]
+    timMsg[9] = addMsg[9];
     // tt : timMsg[10]
+    timMsg[10] = events[i].eventTime - (addMsg[9]*120-60);
+
+    MidiIo.sendMidiMessage(addMsg);
+    MidiIo.sendMidiMessage(timMsg);
   }
 }
 
 function SendButton(){
   const sendButtonClicked = ()=>{
-    makeSysExList(noteList, 0);
+    if( MidiIo.openOutputPortNumber === -1 ){
+      console.log("SEQTRAK is not connected.");
+      return;
+    }
+    if( noteList.length === 0 ){
+      console.log("There is no MIDI file.");
+      return;
+    }
+    sendSysEx(noteList, 0);
   };
   return(
     <>
