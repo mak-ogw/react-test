@@ -56,7 +56,7 @@ function Board() {
 function FileDropArea(){
   const onDrop = useCallback((acceptedFiles) => {
     // console.log('acceptedFiles:', acceptedFiles);
-    if( acceptedFiles.length != 1 ){
+    if( acceptedFiles.length !== 1 ){
       setResult(2);
       return;
     }
@@ -87,9 +87,9 @@ return (
     </div>
     <div>
     {
-      ( result == 0 ) ?
+      ( result === 0 ) ?
         <p></p> :
-      ( result == 1 ) ?
+      ( result === 1 ) ?
         <p> {successMessage} </p> :
         <p> Error happend. Please retry it. (Only one file is acceptable.)</p>
     }
